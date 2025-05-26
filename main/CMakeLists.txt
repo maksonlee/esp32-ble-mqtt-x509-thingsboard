@@ -1,0 +1,12 @@
+idf_component_register(
+    SRCS
+        "spiffs_utils.c"
+        "app_main.c"
+        "mqtt_client_handler.c"
+        "wifi_provisioning.c"
+        "dht11.c"
+        "app_event.c"
+        "cert_manager.c"
+    INCLUDE_DIRS
+        "."
+)

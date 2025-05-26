@@ -1,0 +1,46 @@
+# ESP-IDF build artifacts
+/build/
+*.bin
+*.elf
+*.map
+*.pyc
+*.pyo
+*.orig
+*.log
+
+# Python environment
+__pycache__/
+*.env
+*.venv
+.env/
+.venv/
+
+# IDF CMake build cache
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# IDEs and editors
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*.DS_Store
+Thumbs.db
+
+# ESP-IDF configuration (optional: keep sdkconfig if you version control it)
+sdkconfig
+sdkconfig.old
+
+# Embedded certificate binaries
+*.pem
+*.crt
+*.key
+
+# Certbot renewal hook backups, just in case
+*.pem~
+
+# Optional: exclude secrets or generated certs
+/certs/device.*
