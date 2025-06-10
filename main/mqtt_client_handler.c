@@ -40,6 +40,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
 
+        // Restart telemetry timer
+        if (telemetry_timer)
+        {
+            esp_timer_stop(telemetry_timer);
+            esp_timer_delete(telemetry_timer);
+            telemetry_timer = NULL;
+        }
+
         const esp_timer_create_args_t timer_args = {
             .callback = &send_telemetry,
             .name = "telemetry_timer"};
@@ -48,7 +56,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
 
     case MQTT_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        ESP_LOGW(TAG, "MQTT_EVENT_DISCONNECTED");
 
         if (telemetry_timer)
         {
@@ -57,7 +65,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             telemetry_timer = NULL;
         }
 
-        cert_manager_free();
+        // Do NOT destroy the client — let it auto-reconnect
         break;
 
     case MQTT_EVENT_ERROR:
@@ -72,6 +80,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 void mqtt_app_start(void)
 {
     ESP_LOGI(TAG, "Starting MQTT client...");
+
+    if (mqtt_client != NULL)
+    {
+        ESP_LOGW(TAG, "MQTT client already initialized, skipping");
+        return;
+    }
 
     if (!cert_manager_load())
     {
@@ -106,6 +120,8 @@ void mqtt_app_start(void)
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "MQTT client failed to start: %s", esp_err_to_name(err));
+        esp_mqtt_client_destroy(mqtt_client);
+        mqtt_client = NULL;
         cert_manager_free();
         return;
     }
