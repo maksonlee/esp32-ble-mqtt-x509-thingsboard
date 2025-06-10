@@ -14,7 +14,6 @@
 
 static const char *TAG = "wifi_prov";
 
-#define MAX_RETRY_COUNT 3
 static int retry_count = 0;
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
@@ -39,25 +38,12 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     {
         ESP_LOGW(TAG, "Wi-Fi disconnected");
 
-        if (retry_count < MAX_RETRY_COUNT)
-        {
-            retry_count++;
-            ESP_LOGI(TAG, "Retrying Wi-Fi... (%d/%d)", retry_count, MAX_RETRY_COUNT);
-            esp_wifi_connect();
-        }
-        else
-        {
-            ESP_LOGE(TAG, "Exceeded max retries, resetting provisioning...");
+        ESP_LOGI(TAG, "Retrying Wi-Fi... attempt %d", ++retry_count);
 
-            // Reset provisioning and restart
-            wifi_prov_mgr_reset_provisioning();
-            esp_wifi_stop();
-            esp_wifi_deinit();
+        // Optional: short delay to avoid spamming connection attempts
+        vTaskDelay(pdMS_TO_TICKS(5000));
 
-            ESP_LOGI(TAG, "Restarting BLE provisioning...");
-            wifi_provisioning_start();
-            retry_count = 0;
-        }
+        esp_wifi_connect();
     }
 }
 
