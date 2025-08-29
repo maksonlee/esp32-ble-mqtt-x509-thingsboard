@@ -24,7 +24,7 @@ You must manually place these files into the `spiffs_root` directory before buil
 spiffs_root/
 ├── device.crt            # Device X.509 certificate
 ├── device.key            # Device private key
-└── server_chain.pem      # Server certificate chain (ThingsBoard)
+└── root_ca.crt           # Root CA certificate
 ```
 
 ---
@@ -100,7 +100,7 @@ This project requires ThingsBoard to be configured for:
 For a full step-by-step guide, see:  
 [Secure ThingsBoard MQTTS with X.509 Certificate Chain and Auto-Provisioning](https://www.maksonlee.com/secure-thingsboard-mqtts-with-x-509-certificate-chain-and-auto-provisioning/)
 
-> The ESP32 uses `server_chain.pem` in SPIFFS to verify the ThingsBoard MQTT server certificate.
+> The ESP32 uses `root_ca.crt` in SPIFFS to verify the ThingsBoard MQTT server certificate.
 
 ---
 
@@ -130,7 +130,7 @@ esp32-ble-mqtt-x509-thingsboard/
 ## Notes
 
 - Device certificates are usually valid for **365 days** (adjust as needed).
-- The MQTT client verifies the ThingsBoard server certificate using `server_chain.pem` in SPIFFS.
+- The MQTT client verifies the ThingsBoard server certificate using `root_ca.crt` in SPIFFS.
 - Telemetry is sent to ThingsBoard once per second via MQTT.
 
 ---

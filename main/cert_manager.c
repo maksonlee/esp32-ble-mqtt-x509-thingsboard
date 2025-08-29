@@ -16,7 +16,7 @@ bool cert_manager_load(void)
         return false;
     }
 
-    cert_ca     = spiffs_read_file("/spiffs/server_chain.pem");
+    cert_ca     = spiffs_read_file("/spiffs/root_ca.crt");
     cert_client = spiffs_read_file("/spiffs/device.crt");
     key_client  = spiffs_read_file("/spiffs/device.key");
 
