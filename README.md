@@ -10,7 +10,7 @@ This ESP32 firmware enables BLE-based Wi-Fi provisioning and connects to ThingsB
 - MQTT over TLS (port `8883`)
 - X.509 client certificate authentication
 - Loads certificates from SPIFFS at runtime
-- Sends telemetry every second
+- Samples and sends telemetry every five seconds
 - Clean and modular ESP-IDF implementation
 
 ---
@@ -206,13 +206,13 @@ esp32-ble-mqtt-x509-thingsboard/
 
 - Device certificates are usually valid for **365 days** (adjust as needed).
 - The MQTT client verifies the ThingsBoard server certificate using `root_ca.crt` in SPIFFS.
-- Telemetry is sent to ThingsBoard once per second via MQTT.
+- Telemetry is sampled and sent to ThingsBoard every five seconds by default; configure `CONFIG_TELEMETRY_INTERVAL_SECONDS` to change it.
 
 ## ESP-IDF v6.1 Migration and Validation
 
 - Wi-Fi provisioning uses the managed `network_provisioning` component and renamed APIs; MQTT uses the managed `mqtt` component.
 - Security 1 is explicitly enabled because ESP-IDF 6.x disables it by default. Certificate verification and client certificate authentication remain enabled in the MQTT configuration.
-- DHT11 timing uses `esp_rom_delay_us`; the existing GPIO, telemetry payload, broker setting, and reconnect behavior are preserved.
+- DHT11 timing now uses RMT hardware capture. GPIO 23 remains the default, and telemetry retains the integer `temperature` and `humidity` fields.
 - The two OTA application slots are `0x1d0000` bytes (1,856 KiB) each, at `0x10000` and `0x1e0000`. SPIFFS occupies the final 320 KiB at `0x3b0000`; the layout uses all 4 MiB of flash. NVS, OTA metadata, and PHY offsets remain unchanged.
 
 Validation on Ubuntu 26.04 with ESP-IDF v6.1 and Python 3.14.4: a clean build from `sdkconfig.defaults` and all four automated checks passed. The application image is 1,256,896 bytes, leaving 643,648 bytes (about 34%) in each expanded OTA slot. ESP-IDF itself emits CMake private-include dependency warnings between `esp_wifi` and `wpa_supplicant`; no unknown Kconfig symbols remain.

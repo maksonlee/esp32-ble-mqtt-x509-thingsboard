@@ -15,4 +15,12 @@ config DHT11_GPIO
         Select an available output-capable GPIO. Do not use flash, UART,
         or boot-strapping pins without checking the board wiring.
 
+config TELEMETRY_INTERVAL_SECONDS
+    int "Sensor sampling and telemetry interval (seconds)"
+    range 3 3600
+    default 5
+    help
+        DHT11 reads must be more than two seconds apart. Failed samples are
+        skipped; the same interval applies before trying again.
+
 endmenu

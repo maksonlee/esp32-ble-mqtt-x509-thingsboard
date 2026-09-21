@@ -72,6 +72,10 @@ class BuildContractTests(unittest.TestCase):
             with self.subTest(partition=name):
                 self.assertLessEqual(size, self.partitions[name][3])
 
+    def test_sensor_sampling_interval(self):
+        self.assertGreaterEqual(self.config["TELEMETRY_INTERVAL_SECONDS"], 3)
+        self.assertIn("esp_driver_rmt", self.project["build_components"])
+
 
 if __name__ == "__main__":
     unittest.main()

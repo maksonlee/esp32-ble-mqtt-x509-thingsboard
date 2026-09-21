@@ -60,7 +60,7 @@ static void telemetry_task(void *arg)
             continue;
         }
         /* Notifications interrupt the wait on connection changes. */
-        if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000)) == 0 &&
+        if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(CONFIG_TELEMETRY_INTERVAL_SECONDS * 1000)) == 0 &&
             (xEventGroupGetBits(mqtt_state) & (MQTT_CONNECTED_BIT | NETWORK_READY_BIT)) ==
                 (MQTT_CONNECTED_BIT | NETWORK_READY_BIT)) {
             send_telemetry(NULL);

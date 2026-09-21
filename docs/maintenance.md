@@ -53,3 +53,8 @@ The host uses an open-drain release and guarantees at least a 20 ms start pulse.
 The decoder checks the response, all 40 bits, checksum, and integer output ranges;
 invalid frames never modify the caller's reading. The driver has one task owner.
 Use a suitable external pull-up as required by the sensor/module wiring.
+
+Sampling and publication default to once every five seconds. Change
+`CONFIG_TELEMETRY_INTERVAL_SECONDS` in menuconfig (minimum three seconds).
+Connection changes restart the waiting interval; failed reads are skipped and
+never trigger an immediate retry or publication of cached data.
