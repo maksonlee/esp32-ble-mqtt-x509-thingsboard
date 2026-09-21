@@ -38,6 +38,10 @@ saved credentials every five seconds and logs connection API errors. During BLE
 enrollment the provisioning manager owns attempts, so application retries do not
 race it. IP events remain registered across reconnects.
 
+On `NETWORK_PROV_END`, the manager is deinitialized and the BLE/BT memory is
+released. Reprovisioning uses a restart, so released controller memory never
+needs to be reallocated during the same boot.
+
 The MQTT worker starts at boot and receives network availability directly through
 an event group. No one-shot application event can be lost to a full event queue.
 Missing certificate files, client allocation failures, event-registration failures,

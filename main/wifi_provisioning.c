@@ -43,6 +43,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
     if (event_base == NETWORK_PROV_EVENT && event_id == NETWORK_PROV_END) {
+        esp_err_t err = network_prov_mgr_deinit();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Provisioning cleanup failed: %s", esp_err_to_name(err));
+        }
         xEventGroupClearBits(wifi_state, WIFI_PROVISIONING_BIT);
         if (!(xEventGroupGetBits(wifi_state) & WIFI_ASSOCIATED_BIT)) {
             xEventGroupSetBits(wifi_state, WIFI_RETRY_BIT);
@@ -131,7 +135,7 @@ void wifi_provisioning_start(void)
         // Set up BLE provisioning configuration
         network_prov_mgr_config_t config = {
             .scheme = network_prov_scheme_ble,
-            .scheme_event_handler = NETWORK_PROV_EVENT_HANDLER_NONE};
+            .scheme_event_handler = NETWORK_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM};
 
         ESP_ERROR_CHECK(network_prov_mgr_init(config));
         ESP_ERROR_CHECK(network_prov_mgr_start_provisioning(NETWORK_PROV_SECURITY_1, NULL, service_name, NULL));
