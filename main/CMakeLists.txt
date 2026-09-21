@@ -9,4 +9,13 @@ idf_component_register(
         "cert_manager.c"
     INCLUDE_DIRS
         "."
+    PRIV_REQUIRES
+        esp_driver_gpio
+        esp_event
+        esp_netif
+        esp_rom
+        esp_timer
+        esp_wifi
+        nvs_flash
+        spiffs
 )

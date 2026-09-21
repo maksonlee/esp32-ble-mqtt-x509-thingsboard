@@ -29,7 +29,7 @@ bool spiffs_mount(void)
         return false;
     }
 
-    ESP_LOGI(TAG, "SPIFFS mounted: total=%d, used=%d", total, used);
+    ESP_LOGI(TAG, "SPIFFS mounted: total=%zu, used=%zu", total, used);
     return true;
 }
 

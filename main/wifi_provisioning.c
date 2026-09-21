@@ -8,9 +8,12 @@
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "nvs_flash.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include <stdio.h>
 
-#include "wifi_provisioning/manager.h"
-#include "wifi_provisioning/scheme_ble.h"
+#include "network_provisioning/manager.h"
+#include "network_provisioning/scheme_ble.h"
 
 static const char *TAG = "wifi_prov";
 
@@ -77,7 +80,7 @@ void wifi_provisioning_start(void)
 
     // Check if device is already provisioned
     bool provisioned = false;
-    ESP_ERROR_CHECK(wifi_prov_mgr_is_provisioned(&provisioned));
+    ESP_ERROR_CHECK(network_prov_mgr_is_wifi_provisioned(&provisioned));
 
     if (!provisioned)
     {
@@ -91,12 +94,12 @@ void wifi_provisioning_start(void)
         ESP_LOGI(TAG, "BLE Device Name: %s", service_name);
 
         // Set up BLE provisioning configuration
-        wifi_prov_mgr_config_t config = {
-            .scheme = wifi_prov_scheme_ble,
-            .scheme_event_handler = WIFI_PROV_EVENT_HANDLER_NONE};
+        network_prov_mgr_config_t config = {
+            .scheme = network_prov_scheme_ble,
+            .scheme_event_handler = NETWORK_PROV_EVENT_HANDLER_NONE};
 
-        ESP_ERROR_CHECK(wifi_prov_mgr_init(config));
-        ESP_ERROR_CHECK(wifi_prov_mgr_start_provisioning(WIFI_PROV_SECURITY_1, NULL, service_name, NULL));
+        ESP_ERROR_CHECK(network_prov_mgr_init(config));
+        ESP_ERROR_CHECK(network_prov_mgr_start_provisioning(NETWORK_PROV_SECURITY_1, NULL, service_name, NULL));
     }
     else
     {

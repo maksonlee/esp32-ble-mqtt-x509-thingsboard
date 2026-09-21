@@ -3,7 +3,7 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
-#include "esp32/rom/ets_sys.h"
+#include "esp_rom_sys.h"
 
 #define DHT11_GPIO GPIO_NUM_23
 #define DHT_OK 0
@@ -19,7 +19,7 @@ static int wait_level(gpio_num_t pin, int level, int timeout_us)
     {
         if (t++ > timeout_us)
             return -1;
-        ets_delay_us(1);
+        esp_rom_delay_us(1);
     }
     return t;
 }
@@ -34,7 +34,7 @@ esp_err_t dht11_read(dht11_reading_t *result)
     gpio_set_level(pin, 0);
     vTaskDelay(pdMS_TO_TICKS(20)); // 20ms
     gpio_set_level(pin, 1);
-    ets_delay_us(30);
+    esp_rom_delay_us(30);
     gpio_set_direction(pin, GPIO_MODE_INPUT);
 
     if (wait_level(pin, 0, 80) < 0)

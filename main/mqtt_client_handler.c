@@ -6,6 +6,8 @@
 #include "esp_log.h"
 #include "inttypes.h"
 #include "esp_timer.h"
+#include "sdkconfig.h"
+#include <stdio.h>
 
 static const char *TAG = "mqtt_client";
 
