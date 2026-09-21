@@ -27,16 +27,22 @@ static void send_telemetry(void *arg)
                  reading.temperature, reading.humidity);
 
         int msg_id = esp_mqtt_client_publish(mqtt_client, "v1/devices/me/telemetry", payload, 0, 1, 0);
-        ESP_LOGI(TAG, "Published telemetry, msg_id=%d: %s", msg_id, payload);
+        if (msg_id < 0) {
+            ESP_LOGW(TAG, "Telemetry submission failed (%s)",
+                     msg_id == -2 ? "outbox full" : "transport or allocation failure");
+        } else {
+            ESP_LOGI(TAG, "Submitted telemetry, msg_id=%d: %s", msg_id, payload);
+        }
     }
     else
     {
-        ESP_LOGW(TAG, "Failed to read from DHT11 sensor");
+        ESP_LOGW(TAG, "DHT11 read failed: %s", esp_err_to_name(err));
     }
 }
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
+    esp_mqtt_event_handle_t event = event_data;
     switch ((esp_mqtt_event_id_t)event_id)
     {
     case MQTT_EVENT_CONNECTED:
@@ -71,7 +77,19 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
 
     case MQTT_EVENT_ERROR:
-        ESP_LOGW(TAG, "MQTT_EVENT_ERROR");
+        if (event && event->error_handle) {
+            const esp_mqtt_error_codes_t *error = event->error_handle;
+            ESP_LOGW(TAG, "MQTT error type=%d tls=0x%x stack=0x%x verify=0x%x socket=%d connack=%d",
+                     error->error_type, error->esp_tls_last_esp_err,
+                     error->esp_tls_stack_err, error->esp_tls_cert_verify_flags,
+                     error->esp_transport_sock_errno, error->connect_return_code);
+        } else {
+            ESP_LOGW(TAG, "MQTT error without transport details");
+        }
+        break;
+
+    case MQTT_EVENT_PUBLISHED:
+        ESP_LOGI(TAG, "Broker acknowledged telemetry, msg_id=%d", event->msg_id);
         break;
 
     default:

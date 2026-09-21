@@ -16,3 +16,11 @@ Run host fault-injection tests through the host build limiter:
 
 These tests compile the actual file loader with failing I/O substitutes and
 AddressSanitizer/UndefinedBehaviorSanitizer. They do not access device secrets.
+
+## MQTT diagnostics
+
+Submission and broker acknowledgement are separate log events. Negative publish
+results are failures, not successful uploads. A QoS 1 acknowledgement confirms
+broker receipt; verify ThingsBoard telemetry separately for application receipt.
+Transport failures include TLS verification flags, TLS errors, socket errno,
+and CONNACK status without printing keys or credentials.
