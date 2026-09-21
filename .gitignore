@@ -45,3 +45,11 @@ sdkconfig.old
 
 # Optional: exclude secrets or generated certs
 /certs/device.*
+
+# All per-device provisioning material and staging directories remain local.
+/certs/
+/spiffs_root/
+/spiffs_image/
+*.p12
+*.pfx
+*.pop

@@ -82,3 +82,53 @@ use a controlled internal time source where the deployment requires it.
 
 Existing sdkconfig files must enable `CONFIG_MBEDTLS_HAVE_TIME_DATE=y`; defaults
 do not override a saved disabled setting. The build contract test enforces this.
+
+## USB firmware updates and certificate renewal
+
+Activate ESP-IDF and build first. The maintenance tool uses Python's standard
+library, OpenSSL 3, and the active IDF esptool/spiffsgen; no extra Python package
+is required. It rejects mismatched keys, wrong CN, unordered/invalid chains,
+wrong client usage, expired/near-expiry certificates, unsafe private-key
+permissions, unexpected directory contents, and unsupported partition layouts.
+The default expiry margin is 30 days, configurable with `--min-days`.
+
+```bash
+python tools/device.py check --device-name 'ESP32 DHT11 01'
+/home/administrator/.local/bin/codex-build-limited -- \
+  python tools/device.py image --device-name 'ESP32 DHT11 01' --generate-pop
+/home/administrator/.local/bin/codex-build-limited -- \
+  python tools/device.py flash --device-name 'ESP32 DHT11 01' \
+  --port /dev/ttyUSB0 --expected-mac 94:b9:7e:fa:85:64
+```
+
+`--generate-pop` creates a per-device secret only if absent; it never prints or
+replaces an existing one. Keep that file with the device's private credentials.
+Image generation includes exactly `device.crt`, `device.key`, `root_ca.crt`, and
+`provisioning.pop`, with SPIFFS geometry taken from the build. Images are written
+atomically with mode 0600. Flash always regenerates the image, verifies the
+connected MAC, and relies on esptool write verification. A full update writes
+bootloader, partition table, OTA metadata, application, and SPIFFS together; NVS
+is preserved. Resetting OTA metadata intentionally selects the freshly written
+OTA slot 0. Do not use this tool on an encrypted or secure-boot production board.
+
+For certificate renewal:
+
+1. Obtain a new device key/certificate using the existing EJBCA recovery-enabled
+   profile. Keep the device CN unchanged. This tool does not issue or revoke
+   certificates or change ThingsBoard settings.
+2. Prepare a private staging directory under ignored `certs/`, containing the new
+   ordered `device.crt`, matching `device.key`, server trust `root_ca.crt`, and a
+   copy of the existing `provisioning.pop`. Use directory mode 0700 and key/PoP
+   mode 0600. Keep the previous working bundle available for rollback.
+3. Run `check` with `--certs-dir certs/staged`, then run `flash` with that same
+   option and `--cert-only`, plus the target name, port, and MAC. Certificate-only
+   updates first compare the actual board partition table to the build. They
+   refuse an old layout instead of writing to the wrong location.
+4. Verify boot, clock sync, MQTT acknowledgement, and fresh ThingsBoard telemetry.
+   Only then promote the staged bundle to the local `spiffs_root` used for future
+   updates. Revoke/archive the superseded identity according to CA policy.
+
+SPIFFS replacement is not atomic across power loss. If interrupted, restore the
+previous validated bundle over USB; Wi-Fi NVS is not part of the write. This is
+the supported maintenance workflow for now. Remote OTA, including update-source
+authentication and rollback policy, is intentionally a separate feature.
