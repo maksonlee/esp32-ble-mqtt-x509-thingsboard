@@ -1,6 +1,5 @@
 #include "wifi_provisioning.h"
 #include "mqtt_client_handler.h"
-#include "app_event.h"
 
 #include "esp_log.h"
 #include "esp_event.h"
@@ -63,15 +62,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
     {
         retry_count = 0;
-        ESP_LOGI(TAG, "Got IP address, posting APP_EVENT_WIFI_CONNECTED...");
-        esp_err_t err = esp_event_post(APP_EVENT, APP_EVENT_WIFI_CONNECTED, NULL, 0, 0);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to post connectivity event: %s", esp_err_to_name(err));
-        }
+        ESP_LOGI(TAG, "Got IP address");
+        mqtt_app_set_network(true);
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
         ESP_LOGW(TAG, "Wi-Fi disconnected");
+        mqtt_app_set_network(false);
         xEventGroupClearBits(wifi_state, WIFI_ASSOCIATED_BIT);
 
         /* The provisioning manager owns connection attempts during enrollment. */

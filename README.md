@@ -183,7 +183,6 @@ For a full step-by-step guide, see:
 ```
 esp32-ble-mqtt-x509-thingsboard/
 ├── main/
-│   ├── app_event.c / .h           # Event loop abstraction
 │   ├── app_main.c                 # Entry point (main task)
 │   ├── cert_manager.c / .h       # Loads X.509 certs from SPIFFS
 │   ├── dht11.c / .h              # DHT11 on GPIO 23

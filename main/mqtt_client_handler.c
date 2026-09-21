@@ -17,6 +17,8 @@ static esp_mqtt_client_handle_t mqtt_client = NULL;
 static TaskHandle_t telemetry_task_handle;
 static EventGroupHandle_t mqtt_state;
 #define MQTT_CONNECTED_BIT BIT0
+#define NETWORK_READY_BIT BIT1
+static bool start_client(void);
 
 static void send_telemetry(void *arg)
 {
@@ -51,10 +53,16 @@ static void send_telemetry(void *arg)
 static void telemetry_task(void *arg)
 {
     while (true) {
-        xEventGroupWaitBits(mqtt_state, MQTT_CONNECTED_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
+        xEventGroupWaitBits(mqtt_state, NETWORK_READY_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
+        if (!mqtt_client && !start_client()) {
+            ESP_LOGW(TAG, "MQTT startup failed; retrying in 5 seconds");
+            ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5000));
+            continue;
+        }
         /* Notifications interrupt the wait on connection changes. */
         if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000)) == 0 &&
-            (xEventGroupGetBits(mqtt_state) & MQTT_CONNECTED_BIT)) {
+            (xEventGroupGetBits(mqtt_state) & (MQTT_CONNECTED_BIT | NETWORK_READY_BIT)) ==
+                (MQTT_CONNECTED_BIT | NETWORK_READY_BIT)) {
             send_telemetry(NULL);
         }
     }
@@ -104,31 +112,33 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 void mqtt_app_start(void)
 {
-    ESP_LOGI(TAG, "Starting MQTT client...");
-
-    if (mqtt_client != NULL)
-    {
-        ESP_LOGW(TAG, "MQTT client already initialized, skipping");
-        return;
-    }
-
     if (!mqtt_state) {
         mqtt_state = xEventGroupCreate();
-        if (!mqtt_state) {
-            ESP_LOGE(TAG, "Cannot allocate MQTT state");
-            return;
-        }
+        ESP_ERROR_CHECK(mqtt_state ? ESP_OK : ESP_ERR_NO_MEM);
     }
     if (!telemetry_task_handle &&
         xTaskCreate(telemetry_task, "telemetry", 4096, NULL, 4, &telemetry_task_handle) != pdPASS) {
-        ESP_LOGE(TAG, "Cannot start telemetry task");
-        return;
+        ESP_ERROR_CHECK(ESP_ERR_NO_MEM);
     }
+}
 
+void mqtt_app_set_network(bool available)
+{
+    if (available) {
+        xEventGroupSetBits(mqtt_state, NETWORK_READY_BIT);
+    } else {
+        xEventGroupClearBits(mqtt_state, NETWORK_READY_BIT | MQTT_CONNECTED_BIT);
+    }
+    xTaskNotifyGive(telemetry_task_handle);
+}
+
+static bool start_client(void)
+{
+    ESP_LOGI(TAG, "Starting MQTT client...");
     if (!cert_manager_load())
     {
         ESP_LOGE(TAG, "Certificate manager failed");
-        return;
+        return false;
     }
 
     esp_mqtt_client_config_t mqtt_cfg = {
@@ -150,18 +160,20 @@ void mqtt_app_start(void)
     {
         ESP_LOGE(TAG, "Failed to initialize MQTT client");
         cert_manager_free();
-        return;
+        return false;
     }
 
-    esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-
-    esp_err_t err = esp_mqtt_client_start(mqtt_client);
+    esp_err_t err = esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    if (err == ESP_OK) {
+        err = esp_mqtt_client_start(mqtt_client);
+    }
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "MQTT client failed to start: %s", esp_err_to_name(err));
         esp_mqtt_client_destroy(mqtt_client);
         mqtt_client = NULL;
         cert_manager_free();
-        return;
+        return false;
     }
+    return true;
 }

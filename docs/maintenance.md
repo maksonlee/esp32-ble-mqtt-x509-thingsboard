@@ -37,3 +37,10 @@ Wi-Fi event handlers never sleep to implement reconnect delays. A worker retries
 saved credentials every five seconds and logs connection API errors. During BLE
 enrollment the provisioning manager owns attempts, so application retries do not
 race it. IP events remain registered across reconnects.
+
+The MQTT worker starts at boot and receives network availability directly through
+an event group. No one-shot application event can be lost to a full event queue.
+Missing certificate files, client allocation failures, event-registration failures,
+and client-start failures retry every five seconds while Wi-Fi has an address.
+After successful startup, ESP-MQTT owns transport reconnection. There is one
+client and one sampling task; connection events do not create additional tasks.

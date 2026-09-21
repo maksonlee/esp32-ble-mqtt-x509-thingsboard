@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mqtt_client.h"
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -8,6 +8,7 @@ extern "C"
 #endif
 
     void mqtt_app_start(void);
+    void mqtt_app_set_network(bool available);
 
 #ifdef __cplusplus
 }

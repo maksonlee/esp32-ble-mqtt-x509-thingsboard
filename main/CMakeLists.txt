@@ -5,7 +5,6 @@ idf_component_register(
         "mqtt_client_handler.c"
         "wifi_provisioning.c"
         "dht11.c"
-        "app_event.c"
         "cert_manager.c"
     INCLUDE_DIRS
         "."
