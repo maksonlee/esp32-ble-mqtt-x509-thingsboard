@@ -30,3 +30,10 @@ events wake that task, and a sample is discarded if MQTT disconnected while it
 was being acquired. MQTT enqueue keeps socket writes in the MQTT task. Its
 outbox is bounded to 16 KiB; full-queue failures are logged instead of consuming
 unbounded heap while acknowledgements are unavailable.
+
+## Wi-Fi recovery
+
+Wi-Fi event handlers never sleep to implement reconnect delays. A worker retries
+saved credentials every five seconds and logs connection API errors. During BLE
+enrollment the provisioning manager owns attempts, so application retries do not
+race it. IP events remain registered across reconnects.

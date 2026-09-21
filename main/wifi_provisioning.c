@@ -10,6 +10,7 @@
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 #include <stdio.h>
 
 #include "network_provisioning/manager.h"
@@ -18,40 +19,75 @@
 static const char *TAG = "wifi_prov";
 
 static int retry_count = 0;
+static EventGroupHandle_t wifi_state;
+static TaskHandle_t reconnect_task;
+#define WIFI_RETRY_BIT BIT0
+#define WIFI_PROVISIONING_BIT BIT1
+#define WIFI_ASSOCIATED_BIT BIT2
+
+static void reconnect_worker(void *arg)
+{
+    for (;;) {
+        xEventGroupWaitBits(wifi_state, WIFI_RETRY_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
+        if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5000))) {
+            continue;
+        }
+        EventBits_t state = xEventGroupGetBits(wifi_state);
+        if ((state & WIFI_RETRY_BIT) && !(state & WIFI_PROVISIONING_BIT)) {
+            esp_err_t err = esp_wifi_connect();
+            ESP_LOGI(TAG, "Wi-Fi reconnect attempt %d: %s", ++retry_count, esp_err_to_name(err));
+        }
+    }
+}
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    if (event_base == NETWORK_PROV_EVENT && event_id == NETWORK_PROV_END) {
+        xEventGroupClearBits(wifi_state, WIFI_PROVISIONING_BIT);
+        if (!(xEventGroupGetBits(wifi_state) & WIFI_ASSOCIATED_BIT)) {
+            xEventGroupSetBits(wifi_state, WIFI_RETRY_BIT);
+        }
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
         ESP_LOGI(TAG, "Wi-Fi STA Started");
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED)
     {
+        xEventGroupClearBits(wifi_state, WIFI_RETRY_BIT);
+        xEventGroupSetBits(wifi_state, WIFI_ASSOCIATED_BIT);
+        xTaskNotifyGive(reconnect_task);
         ESP_LOGI(TAG, "Connected to Wi-Fi");
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
     {
         retry_count = 0;
         ESP_LOGI(TAG, "Got IP address, posting APP_EVENT_WIFI_CONNECTED...");
-        esp_event_post(APP_EVENT, APP_EVENT_WIFI_CONNECTED, NULL, 0, portMAX_DELAY);
-        ESP_ERROR_CHECK(esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler));
+        esp_err_t err = esp_event_post(APP_EVENT, APP_EVENT_WIFI_CONNECTED, NULL, 0, 0);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to post connectivity event: %s", esp_err_to_name(err));
+        }
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
         ESP_LOGW(TAG, "Wi-Fi disconnected");
+        xEventGroupClearBits(wifi_state, WIFI_ASSOCIATED_BIT);
 
-        ESP_LOGI(TAG, "Retrying Wi-Fi... attempt %d", ++retry_count);
-
-        // Optional: short delay to avoid spamming connection attempts
-        vTaskDelay(pdMS_TO_TICKS(5000));
-
-        esp_wifi_connect();
+        /* The provisioning manager owns connection attempts during enrollment. */
+        if (!(xEventGroupGetBits(wifi_state) & WIFI_PROVISIONING_BIT)) {
+            xEventGroupSetBits(wifi_state, WIFI_RETRY_BIT);
+            xTaskNotifyGive(reconnect_task);
+        }
     }
 }
 
 void wifi_provisioning_start(void)
 {
+    wifi_state = xEventGroupCreate();
+    ESP_ERROR_CHECK(wifi_state ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(reconnect_worker, "wifi_retry", 3072, NULL, 4,
+                               &reconnect_task) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     // Initialize NVS with fallback logic
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
@@ -71,6 +107,7 @@ void wifi_provisioning_start(void)
     // Register Wi-Fi and IP event handlers
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(NETWORK_PROV_EVENT, NETWORK_PROV_END, &wifi_event_handler, NULL));
 
     // Initialize Wi-Fi with default config
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -84,6 +121,7 @@ void wifi_provisioning_start(void)
 
     if (!provisioned)
     {
+        xEventGroupSetBits(wifi_state, WIFI_PROVISIONING_BIT);
         ESP_LOGI(TAG, "Starting Wi-Fi provisioning via BLE");
 
         // Generate BLE device name using MAC
@@ -104,6 +142,6 @@ void wifi_provisioning_start(void)
     else
     {
         ESP_LOGI(TAG, "Already provisioned, connecting to saved Wi-Fi");
-        ESP_ERROR_CHECK(esp_wifi_connect());
+        xEventGroupSetBits(wifi_state, WIFI_RETRY_BIT);
     }
 }
