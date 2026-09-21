@@ -8,6 +8,8 @@ idf_component_register(
         "dht11_decode.c"
         "cert_manager.c"
         "time_sync.c"
+        "maintenance_button.c"
+        "button_hold.c"
     INCLUDE_DIRS
         "."
     PRIV_REQUIRES

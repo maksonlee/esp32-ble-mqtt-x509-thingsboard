@@ -4,6 +4,7 @@
 #include "esp_err.h"
 #include "esp_netif.h"
 #include "esp_event.h"
+#include "maintenance_button.h"
 
 static const char *TAG = "app_main";
 
@@ -15,4 +16,5 @@ void app_main(void)
 
     mqtt_app_start();
     wifi_provisioning_start();
+    maintenance_button_start();
 }

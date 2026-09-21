@@ -22,6 +22,14 @@ config TIME_SERVER
         Use a reachable internal NTP service here if public UDP/123 is blocked.
         MQTT remains stopped until initial synchronization succeeds.
 
+config REPROVISION_GPIO
+    int "Active-low Wi-Fi reset button GPIO"
+    range 0 33
+    default 0
+    help
+        The ESP32 BOOT button uses GPIO 0. After boot, hold for five seconds
+        to clear only Wi-Fi configuration and restart into BLE provisioning.
+
 config TELEMETRY_INTERVAL_SECONDS
     int "Sensor sampling and telemetry interval (seconds)"
     range 3 3600

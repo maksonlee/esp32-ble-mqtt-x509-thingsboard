@@ -5,6 +5,7 @@
 #include "esp_event.h"
 #include "esp_wifi.h"
 #include "esp_mac.h"
+#include "esp_system.h"
 #include "esp_netif.h"
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
@@ -23,6 +24,7 @@ static TaskHandle_t reconnect_task;
 #define WIFI_RETRY_BIT BIT0
 #define WIFI_PROVISIONING_BIT BIT1
 #define WIFI_ASSOCIATED_BIT BIT2
+#define WIFI_RESET_BIT BIT3
 
 static void reconnect_worker(void *arg)
 {
@@ -32,7 +34,7 @@ static void reconnect_worker(void *arg)
             continue;
         }
         EventBits_t state = xEventGroupGetBits(wifi_state);
-        if ((state & WIFI_RETRY_BIT) && !(state & WIFI_PROVISIONING_BIT)) {
+        if ((state & WIFI_RETRY_BIT) && !(state & (WIFI_PROVISIONING_BIT | WIFI_RESET_BIT))) {
             esp_err_t err = esp_wifi_connect();
             ESP_LOGI(TAG, "Wi-Fi reconnect attempt %d: %s", ++retry_count, esp_err_to_name(err));
         }
@@ -50,6 +52,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         xEventGroupClearBits(wifi_state, WIFI_PROVISIONING_BIT);
         if (!(xEventGroupGetBits(wifi_state) & WIFI_ASSOCIATED_BIT)) {
             xEventGroupSetBits(wifi_state, WIFI_RETRY_BIT);
+        }
+    }
+    else if (event_base == NETWORK_PROV_EVENT && event_id == NETWORK_PROV_WIFI_CRED_FAIL) {
+        ESP_LOGW(TAG, "Wi-Fi credentials rejected; allowing another BLE provisioning attempt");
+        esp_err_t err = network_prov_mgr_reset_wifi_sm_state_on_failure();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Cannot reset provisioning state: %s", esp_err_to_name(err));
         }
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
@@ -76,7 +85,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         xEventGroupClearBits(wifi_state, WIFI_ASSOCIATED_BIT);
 
         /* The provisioning manager owns connection attempts during enrollment. */
-        if (!(xEventGroupGetBits(wifi_state) & WIFI_PROVISIONING_BIT)) {
+        if (!(xEventGroupGetBits(wifi_state) & (WIFI_PROVISIONING_BIT | WIFI_RESET_BIT))) {
             xEventGroupSetBits(wifi_state, WIFI_RETRY_BIT);
             xTaskNotifyGive(reconnect_task);
         }
@@ -108,7 +117,7 @@ void wifi_provisioning_start(void)
     // Register Wi-Fi and IP event handlers
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(NETWORK_PROV_EVENT, NETWORK_PROV_END, &wifi_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(NETWORK_PROV_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
 
     // Initialize Wi-Fi with default config
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -135,6 +144,7 @@ void wifi_provisioning_start(void)
         // Set up BLE provisioning configuration
         network_prov_mgr_config_t config = {
             .scheme = network_prov_scheme_ble,
+            .network_prov_wifi_conn_cfg.wifi_conn_attempts = 3,
             .scheme_event_handler = NETWORK_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM};
 
         ESP_ERROR_CHECK(network_prov_mgr_init(config));
@@ -145,4 +155,20 @@ void wifi_provisioning_start(void)
         ESP_LOGI(TAG, "Already provisioned, connecting to saved Wi-Fi");
         xEventGroupSetBits(wifi_state, WIFI_RETRY_BIT);
     }
+}
+
+void wifi_provisioning_reset(void)
+{
+    xEventGroupSetBits(wifi_state, WIFI_RESET_BIT);
+    xEventGroupClearBits(wifi_state, WIFI_RETRY_BIT);
+    mqtt_app_set_network(false);
+    esp_wifi_disconnect();
+    esp_err_t err = esp_wifi_restore();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Cannot clear Wi-Fi settings: %s", esp_err_to_name(err));
+        xEventGroupClearBits(wifi_state, WIFI_RESET_BIT);
+        xEventGroupSetBits(wifi_state, WIFI_RETRY_BIT);
+        return;
+    }
+    esp_restart();
 }

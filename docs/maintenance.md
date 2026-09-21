@@ -42,6 +42,14 @@ On `NETWORK_PROV_END`, the manager is deinitialized and the BLE/BT memory is
 released. Reprovisioning uses a restart, so released controller memory never
 needs to be reallocated during the same boot.
 
+After normal startup, release BOOT once, then hold it for five seconds to clear
+Wi-Fi configuration and restart into BLE provisioning. Device credentials in
+SPIFFS are retained. Do not hold BOOT while resetting/powering on: GPIO 0 is a
+boot strap and may enter the ROM downloader. Short presses and a pin held low at
+task startup do not trigger reset. `CONFIG_REPROVISION_GPIO` is configurable and
+must differ from the sensor pin. Failed enrollment retries three times, then
+clears the failed Wi-Fi configuration and accepts a new BLE credential attempt.
+
 The MQTT worker starts at boot and receives network availability directly through
 an event group. No one-shot application event can be lost to a full event queue.
 Missing certificate files, client allocation failures, event-registration failures,
