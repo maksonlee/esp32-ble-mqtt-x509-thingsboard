@@ -24,3 +24,9 @@ results are failures, not successful uploads. A QoS 1 acknowledgement confirms
 broker receipt; verify ThingsBoard telemetry separately for application receipt.
 Transport failures include TLS verification flags, TLS errors, socket errno,
 and CONNACK status without printing keys or credentials.
+
+Sampling runs in a dedicated task, not the shared ESP Timer task. Connection
+events wake that task, and a sample is discarded if MQTT disconnected while it
+was being acquired. MQTT enqueue keeps socket writes in the MQTT task. Its
+outbox is bounded to 16 KiB; full-queue failures are logged instead of consuming
+unbounded heap while acknowledgements are unavailable.

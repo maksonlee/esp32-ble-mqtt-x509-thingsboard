@@ -5,14 +5,18 @@
 #include "cert_manager.h"
 #include "esp_log.h"
 #include "inttypes.h"
-#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/event_groups.h"
 #include "sdkconfig.h"
 #include <stdio.h>
 
 static const char *TAG = "mqtt_client";
 
 static esp_mqtt_client_handle_t mqtt_client = NULL;
-static esp_timer_handle_t telemetry_timer = NULL;
+static TaskHandle_t telemetry_task_handle;
+static EventGroupHandle_t mqtt_state;
+#define MQTT_CONNECTED_BIT BIT0
 
 static void send_telemetry(void *arg)
 {
@@ -26,7 +30,11 @@ static void send_telemetry(void *arg)
                  "{\"temperature\":%d,\"humidity\":%d}",
                  reading.temperature, reading.humidity);
 
-        int msg_id = esp_mqtt_client_publish(mqtt_client, "v1/devices/me/telemetry", payload, 0, 1, 0);
+        /* A disconnect during sampling must not enqueue a stale sample. */
+        if (!(xEventGroupGetBits(mqtt_state) & MQTT_CONNECTED_BIT)) {
+            return;
+        }
+        int msg_id = esp_mqtt_client_enqueue(mqtt_client, "v1/devices/me/telemetry", payload, 0, 1, 0, true);
         if (msg_id < 0) {
             ESP_LOGW(TAG, "Telemetry submission failed (%s)",
                      msg_id == -2 ? "outbox full" : "transport or allocation failure");
@@ -40,6 +48,18 @@ static void send_telemetry(void *arg)
     }
 }
 
+static void telemetry_task(void *arg)
+{
+    while (true) {
+        xEventGroupWaitBits(mqtt_state, MQTT_CONNECTED_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
+        /* Notifications interrupt the wait on connection changes. */
+        if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000)) == 0 &&
+            (xEventGroupGetBits(mqtt_state) & MQTT_CONNECTED_BIT)) {
+            send_telemetry(NULL);
+        }
+    }
+}
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     esp_mqtt_event_handle_t event = event_data;
@@ -48,30 +68,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
 
-        // Restart telemetry timer
-        if (telemetry_timer)
-        {
-            esp_timer_stop(telemetry_timer);
-            esp_timer_delete(telemetry_timer);
-            telemetry_timer = NULL;
-        }
-
-        const esp_timer_create_args_t timer_args = {
-            .callback = &send_telemetry,
-            .name = "telemetry_timer"};
-        ESP_ERROR_CHECK(esp_timer_create(&timer_args, &telemetry_timer));
-        ESP_ERROR_CHECK(esp_timer_start_periodic(telemetry_timer, 1000000)); // every 1 second
+        xEventGroupSetBits(mqtt_state, MQTT_CONNECTED_BIT);
+        xTaskNotifyGive(telemetry_task_handle);
         break;
 
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGW(TAG, "MQTT_EVENT_DISCONNECTED");
 
-        if (telemetry_timer)
-        {
-            esp_timer_stop(telemetry_timer);
-            esp_timer_delete(telemetry_timer);
-            telemetry_timer = NULL;
-        }
+        xEventGroupClearBits(mqtt_state, MQTT_CONNECTED_BIT);
+        xTaskNotifyGive(telemetry_task_handle);
 
         // Do NOT destroy the client — let it auto-reconnect
         break;
@@ -107,6 +112,19 @@ void mqtt_app_start(void)
         return;
     }
 
+    if (!mqtt_state) {
+        mqtt_state = xEventGroupCreate();
+        if (!mqtt_state) {
+            ESP_LOGE(TAG, "Cannot allocate MQTT state");
+            return;
+        }
+    }
+    if (!telemetry_task_handle &&
+        xTaskCreate(telemetry_task, "telemetry", 4096, NULL, 4, &telemetry_task_handle) != pdPASS) {
+        ESP_LOGE(TAG, "Cannot start telemetry task");
+        return;
+    }
+
     if (!cert_manager_load())
     {
         ESP_LOGE(TAG, "Certificate manager failed");
@@ -124,6 +142,7 @@ void mqtt_app_start(void)
                 .key = key_client,
             },
         },
+        .outbox.limit = 16 * 1024,
     };
 
     mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
