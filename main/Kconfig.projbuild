@@ -15,6 +15,13 @@ config DHT11_GPIO
         Select an available output-capable GPIO. Do not use flash, UART,
         or boot-strapping pins without checking the board wiring.
 
+config TIME_SERVER
+    string "NTP server used before TLS startup"
+    default "time.cloudflare.com"
+    help
+        Use a reachable internal NTP service here if public UDP/123 is blocked.
+        MQTT remains stopped until initial synchronization succeeds.
+
 config TELEMETRY_INTERVAL_SECONDS
     int "Sensor sampling and telemetry interval (seconds)"
     range 3 3600

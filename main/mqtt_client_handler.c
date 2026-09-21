@@ -3,6 +3,7 @@
 #include "mqtt_client_handler.h"
 #include "mqtt_client.h"
 #include "cert_manager.h"
+#include "time_sync.h"
 #include "esp_log.h"
 #include "inttypes.h"
 #include "freertos/FreeRTOS.h"
@@ -134,6 +135,9 @@ void mqtt_app_set_network(bool available)
 
 static bool start_client(void)
 {
+    if (!time_sync_wait() || !(xEventGroupGetBits(mqtt_state) & NETWORK_READY_BIT)) {
+        return false;
+    }
     ESP_LOGI(TAG, "Starting MQTT client...");
     if (!cert_manager_load())
     {

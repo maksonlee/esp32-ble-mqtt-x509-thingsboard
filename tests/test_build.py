@@ -40,6 +40,7 @@ class BuildContractTests(unittest.TestCase):
         for option in ("BT_ENABLED", "BT_NIMBLE_ENABLED",
                        "NETWORK_PROV_NETWORK_TYPE_WIFI",
                        "ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_1",
+                       "MBEDTLS_HAVE_TIME_DATE",
                        "MQTT_TRANSPORT_SSL"):
             with self.subTest(option=option):
                 self.assertIs(self.config[option], True)

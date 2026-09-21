@@ -13,10 +13,13 @@ CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_ESP_PROTOCOMM_SUPPORT_SECURITY_VERSION_1=y
 CONFIG_NETWORK_PROV_NETWORK_TYPE_WIFI=y
 
-# Keep the existing OTA slots and SPIFFS layout.
+# Full-4-MiB OTA slots and SPIFFS layout.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
 
 # IDF 6.x places FreeRTOS functions in flash unless this option is enabled.
 CONFIG_FREERTOS_IN_IRAM=n
+
+# Require valid certificate dates after SNTP synchronization.
+CONFIG_MBEDTLS_HAVE_TIME_DATE=y

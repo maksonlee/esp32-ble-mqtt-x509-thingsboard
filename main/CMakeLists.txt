@@ -7,6 +7,7 @@ idf_component_register(
         "dht11.c"
         "dht11_decode.c"
         "cert_manager.c"
+        "time_sync.c"
     INCLUDE_DIRS
         "."
     PRIV_REQUIRES
@@ -14,6 +15,7 @@ idf_component_register(
         esp_driver_rmt
         esp_event
         esp_netif
+        lwip
         esp_rom
         esp_timer
         esp_wifi

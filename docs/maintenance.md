@@ -58,3 +58,15 @@ Sampling and publication default to once every five seconds. Change
 `CONFIG_TELEMETRY_INTERVAL_SECONDS` in menuconfig (minimum three seconds).
 Connection changes restart the waiting interval; failed reads are skipped and
 never trigger an immediate retry or publication of cached data.
+
+## Clock and TLS validation
+
+The MQTT worker starts SNTP only after Wi-Fi has an address and waits for initial
+clock synchronization before starting TLS. `CONFIG_TIME_SERVER` defaults to
+`time.cloudflare.com`; UDP/123 must be reachable. Failed synchronization is
+retried without bypassing certificate validation. mbedTLS checks not-before and
+not-after dates as well as the chain and hostname. SNTP itself is unauthenticated;
+use a controlled internal time source where the deployment requires it.
+
+Existing sdkconfig files must enable `CONFIG_MBEDTLS_HAVE_TIME_DATE=y`; defaults
+do not override a saved disabled setting. The build contract test enforces this.
