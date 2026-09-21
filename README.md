@@ -22,10 +22,50 @@ You must manually place these files into the `spiffs_root` directory before buil
 
 ```
 spiffs_root/
-├── device.crt            # Device X.509 certificate
+├── device.crt            # PEM chain: device -> issuing intermediate -> root
 ├── device.key            # Device private key
 └── root_ca.crt           # Root CA certificate
 ```
+
+### Prepare and verify the device certificate chain
+
+`device.crt` must start with the device certificate, followed by its issuing
+intermediate CA. If the root is included, put it last. The chain tested with
+this deployment is **device -> IoTDeviceIssuingCA -> shared Root CA**.
+Do not concatenate additional CA certificates in the order returned by a
+PKCS#12 decoder without checking their issuer relationships. The downloaded
+bundle used during setup returned the root before the intermediate; copying
+that order into PEM caused ThingsBoard to reject the TLS client certificate.
+
+After identifying the individual public certificates, assemble them explicitly
+(the filenames below are placeholders for your exported certificates):
+
+```bash
+umask 077
+cat device-leaf.pem issuing-ca.pem device-root.pem > spiffs_root/device.crt
+openssl crl2pkcs7 -nocrl -certfile spiffs_root/device.crt |
+  openssl pkcs7 -print_certs -noout
+openssl verify -purpose sslclient -CAfile device-root.pem \
+  -untrusted issuing-ca.pem device-leaf.pem
+```
+
+Inspect the printed sequence: each certificate's issuer must match the next
+certificate's subject. `openssl verify` checks a trust path but can rebuild it
+from an unordered collection; success alone does **not** validate PEM ordering.
+Also check that the device certificate matches `device.key`, has the intended
+CN, is currently valid, and permits TLS client authentication. Never print the
+private key when checking it.
+
+In the current deployment, Step CA's intermediate signs the MQTT **server**
+certificate, while EJBCA's `IoTDeviceIssuingCA` signs **device** certificates;
+both chain to the same root. `root_ca.crt` is the trust anchor for verifying the
+server, not a replacement for the device's intermediate certificate.
+The existing EJBCA end entity profile requires key recovery, so this device
+uses an EJBCA-generated recoverable key rather than a locally generated CSR.
+
+After changing any of these files, regenerate and flash the SPIFFS image.
+Verify actual MQTT authentication and telemetry receipt in ThingsBoard;
+a TLS handshake reported successful by a client alone is not sufficient.
 
 ---
 
@@ -174,7 +214,9 @@ esp32-ble-mqtt-x509-thingsboard/
 - DHT11 timing uses `esp_rom_delay_us`; the existing GPIO, telemetry payload, broker setting, reconnect behavior, and partition offsets are preserved.
 - The two OTA application slots remain `0x140000` bytes each. The build must fit these slots; do not enlarge them without reviewing the SPIFFS offset and flash layout.
 
-Validation on Ubuntu 26.04 with ESP-IDF v6.1 and Python 3.14.4: a clean build from `sdkconfig.defaults` and all four automated checks passed. The application image is 1,256,896 bytes, leaving 53,824 bytes (about 4%) in each OTA slot. ESP-IDF itself emits CMake private-include dependency warnings between `esp_wifi` and `wpa_supplicant`; no unknown Kconfig symbols remain. Hardware provisioning and MQTT TLS operation have not yet been validated for this migration.
+Validation on Ubuntu 26.04 with ESP-IDF v6.1 and Python 3.14.4: a clean build from `sdkconfig.defaults` and all four automated checks passed. The application image is 1,256,896 bytes, leaving 53,824 bytes (about 4%) in each OTA slot. ESP-IDF itself emits CMake private-include dependency warnings between `esp_wifi` and `wpa_supplicant`; no unknown Kconfig symbols remain.
+
+Hardware validation on 2026-09-21 with an ESP32-D0WDQ6-V3 and 4 MB flash passed: BLE Wi-Fi provisioning, reconnecting with saved Wi-Fi after restart, SPIFFS certificate loading, and X.509 MQTT authentication. After correcting the device PEM chain order, ThingsBoard automatically created `ESP32 DHT11 01` under the `IoTDevice` profile. DHT11 telemetry was published every second, and server-side latest telemetry confirmed temperature 23 degrees Celsius and humidity 49 percent. Recovery after a separate Wi-Fi or MQTT service interruption remains untested.
 
 Build checks do not replace hardware testing. Before using the migrated firmware, verify fresh BLE provisioning, reconnecting after reboot with saved Wi-Fi credentials, recovery after Wi-Fi/MQTT interruption, SPIFFS certificate loading, ThingsBoard X.509 authentication, and DHT11 telemetry. A failed sensor read does not publish telemetry. End-to-end MQTT testing requires the device certificates and a configured ThingsBoard test environment.
 
