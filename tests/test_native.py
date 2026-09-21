@@ -17,6 +17,9 @@ class NativeTests(unittest.TestCase):
     def test_reprovision_button(self):
         self.run_native("test_button.c")
 
+    def test_mqtt_startup_and_disconnect(self):
+        self.run_native("test_mqtt.c")
+
     def run_native(self, source):
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / "test"
