@@ -57,6 +57,10 @@ and client-start failures retry every five seconds while Wi-Fi has an address.
 After successful startup, ESP-MQTT owns transport reconnection. There is one
 client and one sampling task; connection events do not create additional tasks.
 
+Losing the DHCP address also pauses sampling even if the Wi-Fi radio remains
+associated. A sample is not enqueued until both IP availability and MQTT
+connectivity are present, including a connection change during a sensor read.
+
 ## DHT11 timing
 
 The data pin is configurable (default GPIO 23). RMT captures pulses at 1 MHz,

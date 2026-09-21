@@ -34,7 +34,8 @@ static void send_telemetry(void *arg)
                  reading.temperature, reading.humidity);
 
         /* A disconnect during sampling must not enqueue a stale sample. */
-        if (!(xEventGroupGetBits(mqtt_state) & MQTT_CONNECTED_BIT)) {
+        if ((xEventGroupGetBits(mqtt_state) & (MQTT_CONNECTED_BIT | NETWORK_READY_BIT)) !=
+            (MQTT_CONNECTED_BIT | NETWORK_READY_BIT)) {
             return;
         }
         int msg_id = esp_mqtt_client_enqueue(mqtt_client, "v1/devices/me/telemetry", payload, 0, 1, 0, true);
