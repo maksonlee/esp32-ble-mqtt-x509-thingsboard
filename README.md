@@ -18,7 +18,8 @@ This ESP32 firmware enables BLE-based Wi-Fi provisioning and connects to ThingsB
 ## SPIFFS Content Layout
 
 We do **not** check in credentials or certificates to source control.  
-You must manually place these files into the `spiffs_root` directory before building the SPIFFS image:
+Prepare the certificate/key files in `spiffs_root` and use the maintenance tool
+below to create the per-device PoP and build the SPIFFS image:
 
 ```
 spiffs_root/
@@ -70,17 +71,20 @@ a TLS handshake reported successful by a client alone is not sufficient.
 
 ---
 
-## Generate SPIFFS image manually
+## Generate and validate the SPIFFS image
 
-Activate the ESP-IDF v6.1 environment first (see below). From the project root on Linux:
+Activate ESP-IDF v6.1 and build the firmware first (see below). From the project
+root, replace the device name with the certificate's exact CN:
 
 ```bash
-mkdir -p spiffs_image
-python "$IDF_PATH/components/spiffs/spiffsgen.py" \
-  0x50000 spiffs_root spiffs_image/spiffs.bin
+/home/administrator/.local/bin/codex-build-limited -- \
+  python tools/device.py image --device-name 'ESP32 DHT11 01' --generate-pop
 ```
 
-This requires all three certificate/key files listed above. Firmware compilation itself does not require these files.
+This validates the certificate chain, key, identity, and expiry before packaging
+the four files. `--generate-pop` only creates a missing PoP; it does not rotate
+an existing one or print it. Firmware compilation itself does not require these
+files. See [the maintenance workflow](docs/maintenance.md) for renewal and rollback.
 
 `partitions.csv` places SPIFFS at `0x3b0000`, with size `0x50000`:
 
@@ -125,27 +129,28 @@ After a successful build, check the generated configuration and firmware:
   python -m unittest discover -s tests -v
 ```
 
-> The SPIFFS image will **not** be built automatically. You must run the above `spiffsgen.py` command yourself.
+> The firmware build does not package secrets. Generate the SPIFFS image using
+> the maintenance tool, or let its `flash` action validate and regenerate it.
 
 ---
 
 ## Flash Everything
 
-With the ESP32 connected, replace `/dev/ttyUSB0` with its actual port. For a blank/erased board, use a full flash:
+With the ESP32 connected, supply its actual port, Wi-Fi MAC, and certificate CN:
 
 ```bash
 /home/administrator/.local/bin/codex-build-limited -- \
-  python "$IDF_PATH/tools/idf.py" -p /dev/ttyUSB0 flash --all
+  python tools/device.py flash --device-name 'ESP32 DHT11 01' \
+  --port /dev/ttyUSB0 --expected-mac 94:b9:7e:fa:85:64
 ```
 
-When upgrading from the earlier layout (OTA slots `0x140000`, SPIFFS at `0x290000`), flash the new partition table, OTA metadata, and application together using the full-flash command above. An application-only OTA update cannot migrate this layout. Regenerate SPIFFS at the new size; keep the local certificate/key files available before flashing. Do not erase the whole chip if you want to retain Wi-Fi credentials in NVS.
-
-Then write the regenerated SPIFFS image separately:
-
-```bash
-python -m esptool --chip esp32 --port /dev/ttyUSB0 \
-  write-flash 0x3b0000 spiffs_image/spiffs.bin
-```
+The tool validates credentials and the board MAC, then writes bootloader,
+partition table, OTA metadata, application, and SPIFFS together. NVS Wi-Fi
+settings are preserved. This also migrates the earlier layout (OTA slots
+`0x140000`, SPIFFS at `0x290000`). Application-only OTA cannot migrate a partition
+layout. Add `--cert-only` for a certificate renewal on the current layout; that
+mode first verifies the board's partition table. This is for the unencrypted
+development board; see [security boundaries](docs/security.md) for production.
 
 The SPIFFS image contains the device private key: keep it local and out of source control. The serial-port user needs access to the device (usually membership in `dialout`, effective after a new login).
 
@@ -206,6 +211,8 @@ esp32-ble-mqtt-x509-thingsboard/
 ├── CMakeLists.txt
 ├── sdkconfig.defaults     # Shared defaults; sdkconfig is generated locally
 ├── tests/                 # Checks against the built configuration and images
+├── tools/device.py        # Credential validation and MAC-bound USB maintenance
+├── docs/                  # Maintenance, security boundaries, validation evidence
 └── README.md
 ```
 
@@ -219,12 +226,16 @@ esp32-ble-mqtt-x509-thingsboard/
 
 ## ESP-IDF v6.1 Migration and Validation
 
+The reliability improvements and current test coverage are recorded in
+[validation.md](docs/validation.md). Runtime recovery and maintenance behavior
+are documented in [maintenance.md](docs/maintenance.md).
+
 - Wi-Fi provisioning uses the managed `network_provisioning` component and renamed APIs; MQTT uses the managed `mqtt` component.
 - Security 1 is explicitly enabled because ESP-IDF 6.x disables it by default. Certificate verification and client certificate authentication remain enabled in the MQTT configuration.
 - DHT11 timing now uses RMT hardware capture. GPIO 23 remains the default, and telemetry retains the integer `temperature` and `humidity` fields.
 - The two OTA application slots are `0x1d0000` bytes (1,856 KiB) each, at `0x10000` and `0x1e0000`. SPIFFS occupies the final 320 KiB at `0x3b0000`; the layout uses all 4 MiB of flash. NVS, OTA metadata, and PHY offsets remain unchanged.
 
-Validation on Ubuntu 26.04 with ESP-IDF v6.1 and Python 3.14.4: a clean build from `sdkconfig.defaults` and all four automated checks passed. The application image is 1,256,896 bytes, leaving 643,648 bytes (about 34%) in each expanded OTA slot. ESP-IDF itself emits CMake private-include dependency warnings between `esp_wifi` and `wpa_supplicant`; no unknown Kconfig symbols remain.
+Initial migration validation on Ubuntu 26.04 with ESP-IDF v6.1 and Python 3.14.4: a clean build from `sdkconfig.defaults` and the original four automated checks passed. That application image was 1,256,896 bytes. After the reliability improvements, the image is 1,283,600 bytes, leaving 616,944 bytes (about 32%) in each expanded OTA slot, and 21 automated tests pass. ESP-IDF itself emits CMake private-include dependency warnings between `esp_wifi` and `wpa_supplicant`; no unknown Kconfig symbols remain.
 
 Hardware validation on 2026-09-21 with an ESP32-D0WDQ6-V3 and 4 MB flash passed: BLE Wi-Fi provisioning, reconnecting with saved Wi-Fi after restart, SPIFFS certificate loading, and X.509 MQTT authentication. After correcting the device PEM chain order, ThingsBoard automatically created `ESP32 DHT11 01` under the `IoTDevice` profile. DHT11 telemetry was published every second, and server-side latest telemetry confirmed temperature 23 degrees Celsius and humidity 49 percent. Recovery after a separate Wi-Fi or MQTT service interruption remains untested.
 
