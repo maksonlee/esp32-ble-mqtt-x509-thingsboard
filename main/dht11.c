@@ -41,6 +41,10 @@ static esp_err_t init_receiver(void)
     if (err != ESP_OK) {
         if (channel) { rmt_del_channel(channel); channel = NULL; }
         vQueueDelete(received); received = NULL;
+    } else {
+        /* The pin was floating/input before initialization. Give the sensor a
+         * stable released bus before the first start edge (also on cold boot). */
+        vTaskDelay(pdMS_TO_TICKS(1000) + 1);
     }
     return err;
 }
