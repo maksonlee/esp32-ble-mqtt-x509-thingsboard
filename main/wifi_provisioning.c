@@ -1,5 +1,6 @@
 #include "wifi_provisioning.h"
 #include "mqtt_client_handler.h"
+#include "spiffs_utils.h"
 
 #include "esp_log.h"
 #include "esp_event.h"
@@ -12,6 +13,8 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "network_provisioning/manager.h"
 #include "network_provisioning/scheme_ble.h"
@@ -19,6 +22,18 @@
 static const char *TAG = "wifi_prov";
 
 static int retry_count = 0;
+static char *provisioning_pop;
+
+static void clear_provisioning_pop(void)
+{
+    if (provisioning_pop) {
+        size_t n = strlen(provisioning_pop);
+        volatile char *p = provisioning_pop;
+        while (n--) { *p++ = 0; }
+        free(provisioning_pop);
+        provisioning_pop = NULL;
+    }
+}
 static EventGroupHandle_t wifi_state;
 static TaskHandle_t reconnect_task;
 #define WIFI_RETRY_BIT BIT0
@@ -49,6 +64,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "Provisioning cleanup failed: %s", esp_err_to_name(err));
         }
+        if (err == ESP_OK) { clear_provisioning_pop(); }
         xEventGroupClearBits(wifi_state, WIFI_PROVISIONING_BIT);
         if (!(xEventGroupGetBits(wifi_state) & WIFI_ASSOCIATED_BIT)) {
             xEventGroupSetBits(wifi_state, WIFI_RETRY_BIT);
@@ -134,6 +150,17 @@ void wifi_provisioning_start(void)
         xEventGroupSetBits(wifi_state, WIFI_PROVISIONING_BIT);
         ESP_LOGI(TAG, "Starting Wi-Fi provisioning via BLE");
 
+        if (spiffs_mount()) {
+            provisioning_pop = spiffs_read_file("/spiffs/provisioning.pop");
+        }
+        const char *allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
+        if (!provisioning_pop || strlen(provisioning_pop) < 16 || strlen(provisioning_pop) > 128 ||
+            strspn(provisioning_pop, allowed) != strlen(provisioning_pop)) {
+            ESP_LOGE(TAG, "Missing or invalid per-device PoP; install it with the USB maintenance tool");
+            clear_provisioning_pop();
+            return;
+        }
+
         // Generate BLE device name using MAC
         char service_name[13] = {0}; // PROV_ + 6 hex digits + null terminator
         uint8_t mac[6];
@@ -148,7 +175,7 @@ void wifi_provisioning_start(void)
             .scheme_event_handler = NETWORK_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM};
 
         ESP_ERROR_CHECK(network_prov_mgr_init(config));
-        ESP_ERROR_CHECK(network_prov_mgr_start_provisioning(NETWORK_PROV_SECURITY_1, NULL, service_name, NULL));
+        ESP_ERROR_CHECK(network_prov_mgr_start_provisioning(NETWORK_PROV_SECURITY_1, provisioning_pop, service_name, NULL));
     }
     else
     {

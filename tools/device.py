@@ -120,6 +120,18 @@ def partition_layout(build):
     return result
 
 
+def production_check(build):
+    config = json.loads((build / "config/sdkconfig.json").read_text())
+    missing = []
+    if not config.get("SECURE_BOOT"):
+        missing.append("Secure Boot disabled")
+    if not config.get("SECURE_FLASH_ENC_ENABLED"):
+        missing.append("Flash Encryption disabled")
+    # Encrypted SPIFFS is unsupported by ESP-IDF. Fail closed until storage migrates.
+    missing.append("device key remains in unencrypted SPIFFS; migrate secret storage first")
+    raise ValueError("Not production ready: " + "; ".join(missing))
+
+
 def make_image(args):
     metadata = check_credentials(args.certs_dir, args.device_name, args.min_days)
     layout = partition_layout(args.build)
@@ -192,7 +204,7 @@ def flash(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["check", "image", "flash"])
+    parser.add_argument("action", choices=["check", "image", "flash", "production-check"])
     parser.add_argument("--device-name", required=True)
     parser.add_argument("--certs-dir", type=Path, default=ROOT / "spiffs_root")
     parser.add_argument("--build", type=Path, default=ROOT / "build")
@@ -207,7 +219,8 @@ def main():
     if args.action == "flash" and (not args.port or not args.expected_mac):
         parser.error("flash requires --port and --expected-mac")
     try:
-        if args.action == "check": result = check_credentials(args.certs_dir, args.device_name, args.min_days)
+        if args.action == "production-check": result = production_check(args.build)
+        elif args.action == "check": result = check_credentials(args.certs_dir, args.device_name, args.min_days)
         elif args.action == "image": result = make_image(args)
         else: result = flash(args)
         print(json.dumps(result, indent=2))

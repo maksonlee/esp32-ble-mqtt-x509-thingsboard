@@ -24,6 +24,7 @@ You must manually place these files into the `spiffs_root` directory before buil
 spiffs_root/
 ├── device.crt            # PEM chain: device -> issuing intermediate -> root
 ├── device.key            # Device private key
+├── provisioning.pop      # Per-device BLE proof of possession (private)
 └── root_ca.crt           # Root CA certificate
 ```
 
@@ -159,7 +160,15 @@ Download **ESP BLE Provisioning** app from:
 
 Scan for devices, tap your ESP32, and follow the app instructions to provision Wi-Fi.
 
-The BLE name remains `PROV_` followed by six MAC-address hex digits. This migration retains Security 1 and the existing no-proof-of-possession configuration.
+The BLE name remains `PROV_` followed by six MAC-address hex digits. Security 1
+now requires a per-device proof of possession from `spiffs_root/provisioning.pop`.
+Use the USB maintenance tool to generate it; enter its value in the provisioning
+app through a trusted local channel. Never share it in logs or screenshots.
+Already saved Wi-Fi settings are retained. After boot, hold BOOT for five seconds
+to clear Wi-Fi settings and restart into provisioning; certificates are retained.
+
+See [maintenance and USB renewal](docs/maintenance.md) and
+[deployment security boundaries](docs/security.md) before preparing new devices.
 
 ---
 
