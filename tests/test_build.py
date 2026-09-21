@@ -44,19 +44,25 @@ class BuildContractTests(unittest.TestCase):
             with self.subTest(option=option):
                 self.assertIs(self.config[option], True)
 
-    def test_existing_partition_layout_and_flash_capacity(self):
+    def test_partition_layout_uses_full_flash_capacity(self):
         self.assertEqual(self.config["ESPTOOLPY_FLASHSIZE"], "4MB")
         self.assertEqual(self.config["PARTITION_TABLE_OFFSET"], 0x8000)
         self.assertEqual(self.partitions, {
             "nvs": (1, 2, 0x9000, 0x4000),
             "otadata": (1, 0, 0xD000, 0x2000),
             "phy_init": (1, 1, 0xF000, 0x1000),
-            "ota_0": (0, 0x10, 0x10000, 0x140000),
-            "ota_1": (0, 0x11, 0x150000, 0x140000),
-            "spiffs": (1, 0x82, 0x290000, 0x40000),
+            "ota_0": (0, 0x10, 0x10000, 0x1D0000),
+            "ota_1": (0, 0x11, 0x1E0000, 0x1D0000),
+            "spiffs": (1, 0x82, 0x3B0000, 0x50000),
         })
         for _, _, start, size in self.partitions.values():
             self.assertLessEqual(start + size, 4 * 1024 * 1024)
+        end = 0x9000
+        for kind, _, start, size in sorted(self.partitions.values(), key=lambda p: p[2]):
+            self.assertEqual(start, end, "Partitions must be contiguous")
+            self.assertEqual(start % (0x10000 if kind == 0 else 0x1000), 0)
+            end = start + size
+        self.assertEqual(end, 4 * 1024 * 1024)
 
     def test_firmware_fits_both_ota_slots(self):
         firmware = BUILD / self.project["app_bin"]

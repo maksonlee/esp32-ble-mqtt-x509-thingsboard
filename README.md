@@ -76,15 +76,15 @@ Activate the ESP-IDF v6.1 environment first (see below). From the project root o
 ```bash
 mkdir -p spiffs_image
 python "$IDF_PATH/components/spiffs/spiffsgen.py" \
-  0x40000 spiffs_root spiffs_image/spiffs.bin
+  0x50000 spiffs_root spiffs_image/spiffs.bin
 ```
 
 This requires all three certificate/key files listed above. Firmware compilation itself does not require these files.
 
-The existing `partitions.csv` places SPIFFS at `0x290000`, with size `0x40000`:
+`partitions.csv` places SPIFFS at `0x3b0000`, with size `0x50000`:
 
 ```
-spiffs, data, spiffs, 0x290000, 0x40000
+spiffs, data, spiffs, 0x3b0000, 0x50000
 ```
 
 ---
@@ -137,11 +137,13 @@ With the ESP32 connected, replace `/dev/ttyUSB0` with its actual port. For a bla
   python "$IDF_PATH/tools/idf.py" -p /dev/ttyUSB0 flash --all
 ```
 
-Then write the SPIFFS image separately:
+When upgrading from the earlier layout (OTA slots `0x140000`, SPIFFS at `0x290000`), flash the new partition table, OTA metadata, and application together using the full-flash command above. An application-only OTA update cannot migrate this layout. Regenerate SPIFFS at the new size; keep the local certificate/key files available before flashing. Do not erase the whole chip if you want to retain Wi-Fi credentials in NVS.
+
+Then write the regenerated SPIFFS image separately:
 
 ```bash
 python -m esptool --chip esp32 --port /dev/ttyUSB0 \
-  write-flash 0x290000 spiffs_image/spiffs.bin
+  write-flash 0x3b0000 spiffs_image/spiffs.bin
 ```
 
 The SPIFFS image contains the device private key: keep it local and out of source control. The serial-port user needs access to the device (usually membership in `dialout`, effective after a new login).
@@ -211,12 +213,14 @@ esp32-ble-mqtt-x509-thingsboard/
 
 - Wi-Fi provisioning uses the managed `network_provisioning` component and renamed APIs; MQTT uses the managed `mqtt` component.
 - Security 1 is explicitly enabled because ESP-IDF 6.x disables it by default. Certificate verification and client certificate authentication remain enabled in the MQTT configuration.
-- DHT11 timing uses `esp_rom_delay_us`; the existing GPIO, telemetry payload, broker setting, reconnect behavior, and partition offsets are preserved.
-- The two OTA application slots remain `0x140000` bytes each. The build must fit these slots; do not enlarge them without reviewing the SPIFFS offset and flash layout.
+- DHT11 timing uses `esp_rom_delay_us`; the existing GPIO, telemetry payload, broker setting, and reconnect behavior are preserved.
+- The two OTA application slots are `0x1d0000` bytes (1,856 KiB) each, at `0x10000` and `0x1e0000`. SPIFFS occupies the final 320 KiB at `0x3b0000`; the layout uses all 4 MiB of flash. NVS, OTA metadata, and PHY offsets remain unchanged.
 
-Validation on Ubuntu 26.04 with ESP-IDF v6.1 and Python 3.14.4: a clean build from `sdkconfig.defaults` and all four automated checks passed. The application image is 1,256,896 bytes, leaving 53,824 bytes (about 4%) in each OTA slot. ESP-IDF itself emits CMake private-include dependency warnings between `esp_wifi` and `wpa_supplicant`; no unknown Kconfig symbols remain.
+Validation on Ubuntu 26.04 with ESP-IDF v6.1 and Python 3.14.4: a clean build from `sdkconfig.defaults` and all four automated checks passed. The application image is 1,256,896 bytes, leaving 643,648 bytes (about 34%) in each expanded OTA slot. ESP-IDF itself emits CMake private-include dependency warnings between `esp_wifi` and `wpa_supplicant`; no unknown Kconfig symbols remain.
 
 Hardware validation on 2026-09-21 with an ESP32-D0WDQ6-V3 and 4 MB flash passed: BLE Wi-Fi provisioning, reconnecting with saved Wi-Fi after restart, SPIFFS certificate loading, and X.509 MQTT authentication. After correcting the device PEM chain order, ThingsBoard automatically created `ESP32 DHT11 01` under the `IoTDevice` profile. DHT11 telemetry was published every second, and server-side latest telemetry confirmed temperature 23 degrees Celsius and humidity 49 percent. Recovery after a separate Wi-Fi or MQTT service interruption remains untested.
+
+The expanded flash layout was subsequently rebuilt and all four updated checks passed. Flash write hashes and the boot log confirmed the new layout. Saved Wi-Fi credentials survived the migration, the relocated SPIFFS mounted successfully, and MQTT reconnected. ThingsBoard confirmed fresh telemetry at 23 degrees Celsius and 48 percent humidity.
 
 Build checks do not replace hardware testing. Before using the migrated firmware, verify fresh BLE provisioning, reconnecting after reboot with saved Wi-Fi credentials, recovery after Wi-Fi/MQTT interruption, SPIFFS certificate loading, ThingsBoard X.509 authentication, and DHT11 telemetry. A failed sensor read does not publish telemetry. End-to-end MQTT testing requires the device certificates and a configured ThingsBoard test environment.
 
