@@ -1,6 +1,6 @@
 #pragma once
 
-#include "driver/gpio.h"
+#include <stdbool.h>
 #include "esp_err.h"
 
 typedef struct

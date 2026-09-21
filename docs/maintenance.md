@@ -44,3 +44,12 @@ Missing certificate files, client allocation failures, event-registration failur
 and client-start failures retry every five seconds while Wi-Fi has an address.
 After successful startup, ESP-MQTT owns transport reconnection. There is one
 client and one sampling task; connection events do not create additional tasks.
+
+## DHT11 timing
+
+The data pin is configurable (default GPIO 23). RMT captures pulses at 1 MHz,
+so Wi-Fi interrupts do not turn loop iterations into incorrect pulse widths.
+The host uses an open-drain release and guarantees at least a 20 ms start pulse.
+The decoder checks the response, all 40 bits, checksum, and integer output ranges;
+invalid frames never modify the caller's reading. The driver has one task owner.
+Use a suitable external pull-up as required by the sensor/module wiring.

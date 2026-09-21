@@ -7,4 +7,12 @@ config BROKER_URI
         Set the URI of the MQTT broker to connect to.
         Example: mqtts://mqtt.eclipseprojects.io
 
+config DHT11_GPIO
+    int "DHT11 data GPIO"
+    range 0 33
+    default 23
+    help
+        Select an available output-capable GPIO. Do not use flash, UART,
+        or boot-strapping pins without checking the board wiring.
+
 endmenu

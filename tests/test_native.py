@@ -11,6 +11,9 @@ class NativeTests(unittest.TestCase):
     def test_spiffs_faults(self):
         self.run_native("test_spiffs.c")
 
+    def test_dht11_frames(self):
+        self.run_native("test_dht11.c")
+
     def run_native(self, source):
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / "test"

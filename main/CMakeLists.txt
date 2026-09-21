@@ -5,11 +5,13 @@ idf_component_register(
         "mqtt_client_handler.c"
         "wifi_provisioning.c"
         "dht11.c"
+        "dht11_decode.c"
         "cert_manager.c"
     INCLUDE_DIRS
         "."
     PRIV_REQUIRES
         esp_driver_gpio
+        esp_driver_rmt
         esp_event
         esp_netif
         esp_rom
